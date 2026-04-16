@@ -1,5 +1,12 @@
 # @keystatic/next
 
+## 5.0.6
+
+### Patch Changes
+
+- Updated dependencies:
+  - @itgkey/core@0.5.54
+
 ## 5.0.4
 
 ### Patch Changes

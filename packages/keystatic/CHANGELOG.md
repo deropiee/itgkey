@@ -1,5 +1,11 @@
 # @keystatic/core
 
+## 0.5.54
+
+### Patch Changes
+
+- Patch release for CMS page preview and standalone page navigation sync.
+
 ## 0.5.50
 
 ### Patch Changes
