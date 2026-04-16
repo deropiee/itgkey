@@ -3,15 +3,20 @@ import React from 'react';
 import Markdoc from '@markdoc/markdoc';
 import { reader } from '../../reader';
 import { markdocConfig } from '../../../keystatic.config';
-import { renderPageBlocks } from '../../renderBlocks';
+import { LivePreviewPage } from '../../LivePreviewPage';
 
 export default async function PostPage(props: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { slug } = await props.params;
+  const searchParams = await props.searchParams;
   const post = await reader.collections.posts.read(slug);
 
   if (!post) {
+    if (searchParams.__itg_preview === '1') {
+      return <LivePreviewPage initialBlocks={[]} initialTitle={slug} />;
+    }
     return <div>Post not found!</div>;
   }
 
@@ -24,11 +29,12 @@ export default async function PostPage(props: {
   const renderable = Markdoc.transform(node, markdocConfig);
 
   return (
-    <main style={{ maxWidth: 1240, margin: '0 auto', padding: '56px 32px' }}>
-      <h1>{post.title}</h1>
-      {renderPageBlocks(post.blocks as any)}
+    <LivePreviewPage
+      initialBlocks={(post.blocks as any) ?? []}
+      initialTitle={post.title}
+    >
       <div>{Markdoc.renderers.react(renderable, React)}</div>
-    </main>
+    </LivePreviewPage>
   );
 }
 

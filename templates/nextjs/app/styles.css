@@ -4,7 +4,6 @@ html {
   margin: 0;
   font-size: 1rem;
   font-family: sans-serif;
-  color-scheme: light dark;
 }
 
 body {
@@ -80,35 +79,4 @@ img {
 .itg-widget__link--secondary {
   background: transparent;
   color: #0f172a;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    background: #020617;
-    color: #e2e8f0;
-  }
-
-  p,
-  ul,
-  ol {
-    color: #cbd5e1;
-  }
-
-  .itg-widget__panel {
-    border-color: rgba(148, 163, 184, 0.2);
-    background: rgba(15, 23, 42, 0.88);
-    box-shadow: 0 18px 40px rgba(2, 6, 23, 0.4);
-  }
-
-  .itg-widget__button,
-  .itg-widget__link {
-    border-color: rgba(148, 163, 184, 0.18);
-    background: #e2e8f0;
-    color: #0f172a;
-  }
-
-  .itg-widget__link--secondary {
-    background: transparent;
-    color: #e2e8f0;
-  }
 }

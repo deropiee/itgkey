@@ -294,10 +294,10 @@ function CommandPaletteDialog() {
       {isOpen && (
         <Dialog size="large" isDismissable>
           <Box
-            padding="large"
+            padding="medium"
             UNSAFE_className={css({
               boxSizing: 'border-box',
-              width: 'min(100vw - 32px, 860px)',
+              width: 'min(100vw - 24px, 720px)',
               maxWidth: '100%',
               minWidth: 0,
               overflow: 'hidden',
@@ -305,13 +305,13 @@ function CommandPaletteDialog() {
           >
             <VStack gap="large">
               <Box
-                borderRadius="large"
-                padding="large"
+                borderRadius="xlarge"
+                padding="medium"
                 UNSAFE_className={css({
                   boxSizing: 'border-box',
                   border: `${tokenSchema.size.border.regular} solid ${tokenSchema.color.border.neutral}`,
-                  background: `linear-gradient(135deg, ${tokenSchema.color.background.surface} 0%, ${tokenSchema.color.background.canvas} 100%)`,
-                  boxShadow: `0 18px 36px ${tokenSchema.color.shadow.muted}`,
+                  backgroundColor: tokenSchema.color.background.surface,
+                  boxShadow: `0 14px 28px ${tokenSchema.color.shadow.muted}`,
                   maxWidth: '100%',
                   minWidth: 0,
                   overflow: 'hidden',
@@ -396,18 +396,18 @@ function CommandPaletteDialog() {
 
               <Box
                 UNSAFE_className={css({
-                  maxHeight: '70vh',
+                  maxHeight: 'min(62vh, 560px)',
                   maxWidth: '100%',
                   minWidth: 0,
                   overflowX: 'hidden',
                   overflowY: 'auto',
-                  paddingRight: tokenSchema.size.space.small,
+                  paddingRight: tokenSchema.size.space.xsmall,
                 })}
               >
                 {filteredCommands.length === 0 ? (
                   <EmptyResults />
                 ) : (
-                  <VStack gap="large">
+                  <VStack gap="xlarge">
                     {(Object.keys(groupedCommands) as CommandType[]).map(
                       type => {
                         const groupItems = groupedCommands[type];
@@ -416,54 +416,37 @@ function CommandPaletteDialog() {
                         }
 
                         return (
-                          <Box
-                            key={type}
-                            borderRadius="large"
-                            padding="large"
-                            UNSAFE_className={css({
-                              boxSizing: 'border-box',
-                              border: `${tokenSchema.size.border.regular} solid ${tokenSchema.color.border.neutral}`,
-                              backgroundColor:
-                                tokenSchema.color.background.surface,
-                              maxWidth: '100%',
-                              minWidth: 0,
-                              overflow: 'hidden',
-                            })}
-                          >
-                            <VStack gap="medium">
-                              <Text
-                                size="small"
-                                weight="semibold"
-                                color="neutralSecondary"
-                                UNSAFE_className={css({
-                                  letterSpacing: '0.08em',
-                                  textTransform: 'uppercase',
-                                })}
-                              >
-                                {typeLabels[type]}
-                              </Text>
-                              <Divider />
-                              <VStack gap="small">
-                                {groupItems.map(command => {
-                                  currentIndex += 1;
-                                  const commandIndex = currentIndex;
-                                  return (
-                                    <CommandItem
-                                      key={command.id}
-                                      command={command}
-                                      isSelected={
-                                        commandIndex === selectedIndex
-                                      }
-                                      onHover={() =>
-                                        setSelectedIndex(commandIndex)
-                                      }
-                                      onSelect={() => executeCommand(command)}
-                                    />
-                                  );
-                                })}
-                              </VStack>
+                          <VStack key={type} gap="small">
+                            <Text
+                              size="small"
+                              weight="semibold"
+                              color="neutralSecondary"
+                              UNSAFE_className={css({
+                                letterSpacing: '0.08em',
+                                textTransform: 'uppercase',
+                              })}
+                            >
+                              {typeLabels[type]}
+                            </Text>
+                            <Divider />
+                            <VStack gap="small">
+                              {groupItems.map(command => {
+                                currentIndex += 1;
+                                const commandIndex = currentIndex;
+                                return (
+                                  <CommandItem
+                                    key={command.id}
+                                    command={command}
+                                    isSelected={commandIndex === selectedIndex}
+                                    onHover={() =>
+                                      setSelectedIndex(commandIndex)
+                                    }
+                                    onSelect={() => executeCommand(command)}
+                                  />
+                                );
+                              })}
                             </VStack>
-                          </Box>
+                          </VStack>
                         );
                       }
                     )}
@@ -520,7 +503,7 @@ function CommandItem(props: {
         '&:hover': {
           transform: 'translateY(-1px)',
           borderColor: tokenSchema.color.border.accent,
-          boxShadow: `0 10px 20px ${tokenSchema.color.shadow.muted}`,
+          boxShadow: `0 8px 18px ${tokenSchema.color.shadow.muted}`,
         },
       })}
     >
@@ -528,7 +511,7 @@ function CommandItem(props: {
         borderRadius="medium"
         padding="small"
         UNSAFE_className={css({
-          backgroundColor: tokenSchema.color.scale.indigo3,
+          backgroundColor: tokenSchema.color.background.surface,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -551,6 +534,9 @@ function CommandItem(props: {
         tone={command.type === 'action' ? 'accent' : 'neutral'}
         UNSAFE_className={css({
           flexShrink: 0,
+          '@media (max-width: 640px)': {
+            display: 'none',
+          },
         })}
       >
         {command.type}

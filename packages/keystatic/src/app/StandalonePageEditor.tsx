@@ -498,7 +498,9 @@ function StandalonePageEditorLocal(
     currentPage
   );
   const previewHref =
-    currentPage['isHomepage'] === true ? '/' : `/${currentPageSlug}`;
+    currentPage['isHomepage'] === true
+      ? '/'
+      : `/${encodeURIComponent(currentPageSlug)}`;
   const isGitHub = isGitHubConfig(props.config) || isCloudConfig(props.config);
   const viewHref =
     isGitHub && repoInfo
@@ -639,11 +641,34 @@ function StandalonePageEditorLocal(
       );
       if (props.settingsSync) {
         const currentSettingsState = props.settingsSync.state ?? {};
-        const nextSettingsState = upsertNavigationItem(currentSettingsState, {
-          label: nextLabel,
-          previousSlug: props.mode === 'edit' ? props.slug : undefined,
-          slug,
-        });
+        const nextSettingsState = syncNavigationItems(
+          currentSettingsState,
+          getStandalonePageItemsFromState(
+            props.standalonePageSingleton,
+            editorState.state
+          ).flatMap(item => {
+            try {
+              return [
+                {
+                  label: getStandalonePageItemLabel(
+                    props.standalonePageSingleton,
+                    item
+                  ),
+                  slug: getStandalonePageItemSlug(
+                    props.standalonePageSingleton,
+                    item
+                  ),
+                },
+              ];
+            } catch {
+              return [];
+            }
+          }),
+          {
+            currentSlug: slug,
+            previousSlug: props.mode === 'edit' ? props.slug : undefined,
+          }
+        );
         Object.assign(currentSettingsState, nextSettingsState);
         if (settingsUpdateResult.kind !== 'loading') {
           await onUpdateSettings(override);
@@ -926,45 +951,61 @@ function getRepoIdentifier(repo: string | { owner: string; name: string }) {
   return typeof repo === 'string' ? repo : `${repo.owner}/${repo.name}`;
 }
 
-function upsertNavigationItem(
+function syncNavigationItems(
   currentState: Record<string, unknown>,
-  item: { label: string; previousSlug?: string; slug: string }
+  pages: { label: string; slug: string }[],
+  currentPage?: { currentSlug: string; previousSlug?: string }
 ) {
   const currentNav = Array.isArray(currentState.navigation)
     ? currentState.navigation
     : [];
-  const normalizedSlug = item.slug.replace(/^\/+|\/+$/g, '');
-  const normalizedPreviousSlug = item.previousSlug
-    ? item.previousSlug.replace(/^\/+|\/+$/g, '')
+  const remainingPages = new Map(
+    pages.map(page => [normalizeNavigationSlug(page.slug), page])
+  );
+  const normalizedPreviousSlug = currentPage?.previousSlug
+    ? normalizeNavigationSlug(currentPage.previousSlug)
+    : undefined;
+  const currentPageSlug = currentPage
+    ? normalizeNavigationSlug(currentPage.currentSlug)
     : undefined;
   const nextNav = currentNav.map(entry => ({ ...entry })) as Record<
     string,
     unknown
   >[];
-  const existingIndex = nextNav.findIndex(entry => {
-    const value = entry.slug;
-    if (typeof value !== 'string') {
-      return false;
+
+  for (const entry of nextNav) {
+    if (typeof entry.slug !== 'string') {
+      continue;
     }
-    const normalizedEntrySlug = value.replace(/^\/+|\/+$/g, '');
-    return (
-      normalizedEntrySlug === normalizedSlug ||
-      (normalizedPreviousSlug !== undefined &&
-        normalizedEntrySlug === normalizedPreviousSlug)
-    );
-  });
-  if (existingIndex >= 0) {
-    nextNav[existingIndex].label = item.label;
-    nextNav[existingIndex].title = item.label;
-    nextNav[existingIndex].slug = normalizedSlug;
-    if (typeof nextNav[existingIndex].visible !== 'boolean') {
-      nextNav[existingIndex].visible = true;
+
+    const normalizedEntrySlug = normalizeNavigationSlug(entry.slug);
+    let page = remainingPages.get(normalizedEntrySlug);
+    if (
+      !page &&
+      normalizedPreviousSlug &&
+      currentPageSlug &&
+      normalizedEntrySlug === normalizedPreviousSlug
+    ) {
+      page = remainingPages.get(currentPageSlug);
     }
-  } else {
+    if (!page) {
+      continue;
+    }
+
+    entry.label = page.label;
+    entry.title = page.label;
+    entry.slug = normalizeNavigationSlug(page.slug);
+    if (typeof entry.visible !== 'boolean') {
+      entry.visible = true;
+    }
+    remainingPages.delete(normalizeNavigationSlug(page.slug));
+  }
+
+  for (const page of remainingPages.values()) {
     nextNav.push({
-      label: item.label,
-      title: item.label,
-      slug: normalizedSlug,
+      label: page.label,
+      title: page.label,
+      slug: normalizeNavigationSlug(page.slug),
       visible: true,
     });
   }
@@ -972,4 +1013,8 @@ function upsertNavigationItem(
     ...currentState,
     navigation: nextNav,
   };
+}
+
+function normalizeNavigationSlug(slug: string) {
+  return slug.replace(/^\/+|\/+$/g, '');
 }

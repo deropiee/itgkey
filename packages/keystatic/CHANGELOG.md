@@ -1,5 +1,11 @@
 # @keystatic/core
 
+## 0.5.55
+
+### Patch Changes
+
+- Improve live preview updates, standalone page settings navigation sync, and admin command palette layout.
+
 ## 0.5.54
 
 ### Patch Changes

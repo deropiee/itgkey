@@ -21,9 +21,6 @@ export function FrontendNav(props: { items: { href: string; label: string }[] })
           margin: '0 auto',
         }}
       >
-        <Link href="/" style={{ fontWeight: 700, marginRight: 6 }}>
-          Home
-        </Link>
         {props.items.map(item => (
           <Link key={item.href} href={item.href}>
             {item.label}

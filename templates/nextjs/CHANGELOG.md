@@ -1,5 +1,22 @@
 # @keystatic/templates-nextjs
 
+## 0.0.69
+
+### Patch Changes
+
+- Improve Next.js live preview handling, frontend navigation syncing, and remove the forced frontend dark mode override.
+
+- Updated dependencies:
+  - @itgkey/core@0.5.55
+
+## 0.0.68
+
+### Patch Changes
+
+- Updated dependencies:
+  - @itgkey/core@0.5.54
+  - @itgkey/next@5.0.6
+
 ## 0.0.67
 
 ### Patch Changes

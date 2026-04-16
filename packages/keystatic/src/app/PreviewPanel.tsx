@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ActionButton, ToggleButton } from '@keystar/ui/button';
 import { Icon } from '@keystar/ui/icon';
@@ -17,6 +17,38 @@ type PreviewPanelProps = {
   href?: string;
   title?: string;
 };
+
+const PREVIEW_QUERY_PARAM = '__itg_preview';
+const PREVIEW_STORAGE_PREFIX = 'itg-preview:';
+
+type PreviewMessage = {
+  data: Record<string, unknown>;
+  pathname: string;
+  source: 'itg-preview';
+  timestamp: number;
+  title?: string;
+};
+
+function getPreviewPathname(href: string) {
+  return getPreviewUrl(href).pathname || '/';
+}
+
+function getPreviewIframeHref(href: string) {
+  const url = getPreviewUrl(href);
+  url.searchParams.set(PREVIEW_QUERY_PARAM, '1');
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function getPreviewStorageKey(pathname: string) {
+  return `${PREVIEW_STORAGE_PREFIX}${pathname || '/'}`;
+}
+
+function getPreviewUrl(href: string) {
+  return new URL(
+    href,
+    typeof window === 'undefined' ? 'http://localhost' : window.location.origin
+  );
+}
 
 // Render a preview of the entry data - with depth limit to prevent stack overflow
 function renderValue(value: unknown, depth = 0, maxDepth = 3): React.ReactNode {
@@ -116,6 +148,48 @@ function renderValue(value: unknown, depth = 0, maxDepth = 3): React.ReactNode {
 }
 
 export function PreviewPanel({ data, href, title }: PreviewPanelProps) {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const previewPathname = useMemo(
+    () => (href ? getPreviewPathname(href) : undefined),
+    [href]
+  );
+  const iframeHref = useMemo(
+    () => (href ? getPreviewIframeHref(href) : undefined),
+    [href]
+  );
+  const publishPreview = useCallback(() => {
+    if (!href || !previewPathname) {
+      return;
+    }
+
+    const payload: PreviewMessage = {
+      data,
+      pathname: previewPathname,
+      source: 'itg-preview',
+      timestamp: Date.now(),
+      title,
+    };
+    const storageKey = getPreviewStorageKey(previewPathname);
+
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(payload));
+    } catch {}
+
+    if ('BroadcastChannel' in window) {
+      const channel = new BroadcastChannel(storageKey);
+      channel.postMessage(payload);
+      channel.close();
+    }
+
+    iframeRef.current?.contentWindow?.postMessage(payload, window.location.origin);
+  }, [data, href, previewPathname, title]);
+
+  useEffect(() => {
+    if (href) {
+      publishPreview();
+    }
+  }, [href, publishPreview]);
+
   if (href) {
     return (
       <Box
@@ -143,11 +217,12 @@ export function PreviewPanel({ data, href, title }: PreviewPanelProps) {
             </Text>
           </VStack>
         </Flex>
-        <Box
-          elementType="iframe"
+        <iframe
+          ref={iframeRef}
           title={title || 'Preview'}
-          src={href}
-          UNSAFE_className={css({
+          src={iframeHref}
+          onLoad={publishPreview}
+          className={css({
             border: 0,
             flex: 1,
             width: '100%',

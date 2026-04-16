@@ -212,6 +212,12 @@ export function renderPageBlocks(blocks: Block[] | undefined): ReactNode {
   });
 }
 
+export const pageShellStyles: CSSProperties = {
+  maxWidth: 1240,
+  margin: '0 auto',
+  padding: '56px 32px',
+};
+
 const buttonPrimary: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',

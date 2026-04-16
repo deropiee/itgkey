@@ -153,9 +153,10 @@ function ItemPageInner(
   const [forceValidation, setForceValidation] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const trackActivity = useTrackActivity();
+  const previewSlug = getSlugFromState(collectionConfig, props.state);
   const previewHref = collectionConfig.previewUrl
     ? collectionConfig.previewUrl
-        .replace('{slug}', props.itemSlug)
+        .replace('{slug}', encodeURIComponent(previewSlug))
         .replace('{branch}', currentBranch)
     : undefined;
   const { push, replace } = router;
@@ -344,9 +345,10 @@ function ItemPageInner(
           isPreviewOpen={isPreviewOpen}
           preview={
             <PreviewPanel
+              href={previewHref}
               data={props.state}
               schema={collectionConfig.schema}
-              title={itemSlug}
+              title={isStandalonePage ? standalonePageTitle : previewSlug}
             />
           }
         >

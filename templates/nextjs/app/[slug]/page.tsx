@@ -4,12 +4,14 @@ import {
   getPageSlug,
   normalizePageSlug,
 } from '../../page-builder';
-import { renderPageBlocks } from '../renderBlocks';
+import { LivePreviewPage } from '../LivePreviewPage';
 
 export default async function Post(props: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await props.params;
+  const searchParams = await props.searchParams;
   const { slug } = params;
   const normalizedSlug = normalizePageSlug(slug);
 
@@ -27,11 +29,15 @@ export default async function Post(props: {
 
   if (page) {
     return (
-      <main style={{ maxWidth: 1240, margin: '0 auto', padding: '56px 32px' }}>
-        <h1 style={{ marginBottom: 24 }}>{page.title}</h1>
-        {renderPageBlocks(page.blocks as any)}
-      </main>
+      <LivePreviewPage
+        initialBlocks={(page.blocks as any) ?? []}
+        initialTitle={page.title}
+      />
     );
+  }
+
+  if (searchParams.__itg_preview === '1') {
+    return <LivePreviewPage initialBlocks={[]} initialTitle={slug} />;
   }
 
   return <div>Page not found!</div>;
