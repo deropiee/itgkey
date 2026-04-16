@@ -39,7 +39,7 @@ const RESPONSIVE_PADDING = {
 export function containerWidthForEntryLayout(
   config: Collection<any, any> | Singleton<any>
 ) {
-  return config.entryLayout === 'content' ? 'none' : 'medium';
+  return config.entryLayout === 'content' ? 'none' : 'large';
 }
 
 const EntryLayoutSplitPaneContext = createContext<'main' | 'side' | null>(null);

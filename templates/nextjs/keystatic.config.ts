@@ -200,6 +200,7 @@ export default config({
       slugField: 'title',
       path: 'posts/*',
       format: { contentField: 'content' },
+      previewUrl: '/posts/{slug}',
       schema: {
         title: fields.slug({ name: { label: 'Title' } }),
         content: fields.markdoc({
@@ -271,4 +272,3 @@ export default config({
     }),
   },
 });
-

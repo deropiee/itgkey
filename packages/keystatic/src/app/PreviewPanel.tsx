@@ -14,6 +14,7 @@ import { Tooltip, TooltipTrigger } from '@keystar/ui/tooltip';
 type PreviewPanelProps = {
   data: Record<string, unknown>;
   schema: Record<string, unknown>;
+  href?: string;
   title?: string;
 };
 
@@ -114,7 +115,50 @@ function renderValue(value: unknown, depth = 0, maxDepth = 3): React.ReactNode {
   return <Text>{String(value)}</Text>;
 }
 
-export function PreviewPanel({ data, title }: PreviewPanelProps) {
+export function PreviewPanel({ data, href, title }: PreviewPanelProps) {
+  if (href) {
+    return (
+      <Box
+        UNSAFE_className={css({
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 0,
+        })}
+      >
+        <Flex
+          alignItems="center"
+          justifyContent="space-between"
+          gap="regular"
+          padding="regular"
+          UNSAFE_className={css({
+            borderBottom: `1px solid ${tokenSchema.color.border.neutral}`,
+            backgroundColor: tokenSchema.color.background.surface,
+          })}
+        >
+          <VStack gap="xsmall" minWidth={0}>
+            <Heading size="small">{title || 'Preview'}</Heading>
+            <Text color="neutralSecondary" size="small" truncate>
+              {href}
+            </Text>
+          </VStack>
+        </Flex>
+        <Box
+          elementType="iframe"
+          title={title || 'Preview'}
+          src={href}
+          UNSAFE_className={css({
+            border: 0,
+            flex: 1,
+            width: '100%',
+            minHeight: 0,
+            backgroundColor: tokenSchema.color.background.canvas,
+          })}
+        />
+      </Box>
+    );
+  }
+
   return (
     <Box
       padding="large"

@@ -21,7 +21,7 @@ import { delDraft, getDraft, setDraft } from './persistence';
 import { usePreviewProps } from './preview-props';
 import { useRouter } from './router';
 import { PageBody, PageHeader, PageRoot } from './shell/page';
-import { useBaseCommit } from './shell/data';
+import { useBaseCommit, useCurrentBranch, useRepoInfo } from './shell/data';
 import { useRecentItems } from './shell/navigation-history';
 import {
   createStandalonePageItem,
@@ -37,13 +37,24 @@ import { useData } from './useData';
 import { useHasChanged } from './useHasChanged';
 import { serializeEntryToFiles, useUpsertItem } from './updating';
 import {
+  getDataFileExtension,
+  getPathPrefix,
+  getRepoUrl,
   getSingletonFormat,
   getSingletonPath,
+  isCloudConfig,
   isGitHubConfig,
   useShowRestoredDraftMessage,
 } from './utils';
-import { CreateBranchDuringUpdateDialog } from './ItemPage';
+import {
+  CreateBranchDuringUpdateDialog,
+  HeaderActions,
+} from './ItemPage';
 import { useTrackActivity } from './dashboard/ActivityFeed';
+import { copyEntryToClipboard, getPastedEntry } from './entry-clipboard';
+import { setValueToPreviewProps } from '../form/get-value';
+import { toastQueue } from '@keystar/ui/toast';
+import { PreviewPanel, PreviewToggle, SplitEditor } from './PreviewPanel';
 
 type StandalonePageEditorProps = {
   basePath: string;
@@ -272,10 +283,21 @@ function StandalonePageEditorLocal(
 ) {
   const router = useRouter();
   const baseCommit = useBaseCommit();
+  const currentBranch = useCurrentBranch();
+  const repoInfo = useRepoInfo();
   const { addRecentItem } = useRecentItems();
   const trackActivity = useTrackActivity();
   const [forceValidation, setForceValidation] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<null | {
+    nextHref: string;
+    nextState: Record<string, unknown>;
+  }>(null);
   const routeKey = props.mode === 'create' ? 'create' : props.slug ?? '';
+  const duplicateSlug = useMemo(
+    () => new URLSearchParams(router.search).get('duplicate') ?? undefined,
+    [router.search]
+  );
   const draftScope = useMemo(
     () =>
       [
@@ -309,7 +331,28 @@ function StandalonePageEditorLocal(
                 props.standalonePageSingleton,
                 baseState
               ),
-              createStandalonePageItem(props.standalonePageSingleton),
+              duplicateSlug
+                ? (() => {
+                    const duplicateItem = getStandalonePageItemsFromState(
+                      props.standalonePageSingleton,
+                      baseState
+                    ).find(item => {
+                      try {
+                        return (
+                          getStandalonePageItemSlug(
+                            props.standalonePageSingleton,
+                            item
+                          ) === duplicateSlug
+                        );
+                      } catch {
+                        return false;
+                      }
+                    });
+                    return duplicateItem
+                      ? structuredClone(duplicateItem)
+                      : createStandalonePageItem(props.standalonePageSingleton);
+                  })()
+                : createStandalonePageItem(props.standalonePageSingleton),
             ],
           }
         : baseState);
@@ -354,6 +397,7 @@ function StandalonePageEditorLocal(
     props.singletonSchema,
     props.slug,
     props.standalonePageSingleton,
+    duplicateSlug,
     routeKey,
   ]);
 
@@ -449,6 +493,25 @@ function StandalonePageEditorLocal(
   const hasChanged =
     hasChangedFromRemote ||
     (props.mode === 'create' && hasChangedFromCreateBase);
+  const currentPageSlug = getStandalonePageItemSlug(
+    props.standalonePageSingleton,
+    currentPage
+  );
+  const previewHref =
+    currentPage['isHomepage'] === true ? '/' : `/${currentPageSlug}`;
+  const isGitHub = isGitHubConfig(props.config) || isCloudConfig(props.config);
+  const viewHref =
+    isGitHub && repoInfo
+      ? `${getRepoUrl(repoInfo)}${
+          format.dataLocation === 'index'
+            ? `/tree/${currentBranch}/${
+                getPathPrefix(props.config.storage) ?? ''
+              }${singletonPath}`
+            : `/blob/${currentBranch}/${
+                getPathPrefix(props.config.storage) ?? ''
+              }${singletonPath}${getDataFileExtension(format)}`
+        }`
+      : undefined;
 
   useEffect(() => {
     const key = [
@@ -575,12 +638,13 @@ function StandalonePageEditorLocal(
         nextLabel
       );
       if (props.settingsSync) {
-        const nextSettingsState = upsertNavigationItem(props.settingsSync.state, {
+        const currentSettingsState = props.settingsSync.state ?? {};
+        const nextSettingsState = upsertNavigationItem(currentSettingsState, {
           label: nextLabel,
           previousSlug: props.mode === 'edit' ? props.slug : undefined,
           slug,
         });
-        Object.assign(props.settingsSync.state, nextSettingsState);
+        Object.assign(currentSettingsState, nextSettingsState);
         if (settingsUpdateResult.kind !== 'loading') {
           await onUpdateSettings(override);
         }
@@ -592,6 +656,122 @@ function StandalonePageEditorLocal(
       }
     }
   };
+
+  useEffect(() => {
+    if (!pendingDelete || updateResult.kind === 'loading') {
+      return;
+    }
+    if (editorState.state !== pendingDelete.nextState) {
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      if (await onUpdate()) {
+        if (!cancelled) {
+          router.push(pendingDelete.nextHref);
+          setPendingDelete(null);
+        }
+      } else if (!cancelled) {
+        setPendingDelete(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editorState.state, onUpdate, pendingDelete, router, updateResult.kind]);
+
+  const onCopy = useCallback(() => {
+    copyEntryToClipboard(
+      currentPage,
+      format,
+      props.standalonePageSingleton.itemSchema.fields,
+      {
+        field: props.standalonePageSingleton.slugField,
+        value: currentPageSlug,
+      }
+    );
+  }, [
+    currentPage,
+    currentPageSlug,
+    format,
+    props.standalonePageSingleton.itemSchema.fields,
+    props.standalonePageSingleton.slugField,
+  ]);
+
+  const onPaste = useCallback(async () => {
+    const entry = await getPastedEntry(
+      format,
+      props.standalonePageSingleton.itemSchema.fields,
+      {
+        field: props.standalonePageSingleton.slugField,
+        slug: currentPageSlug,
+      }
+    );
+    if (entry) {
+      setValueToPreviewProps(entry, pagePreview as any);
+      toastQueue.positive('Page pasted', {
+        shouldCloseOnAction: true,
+        actionLabel: 'Undo',
+        onAction: () => {
+          setValueToPreviewProps(currentPage, pagePreview as any);
+        },
+      });
+    }
+  }, [
+    currentPage,
+    currentPageSlug,
+    format,
+    pagePreview,
+    props.standalonePageSingleton.itemSchema.fields,
+    props.standalonePageSingleton.slugField,
+  ]);
+
+  const onDuplicate = useCallback(() => {
+    router.push(
+      `${getStandalonePageCreatePath(
+        props.config,
+        props.basePath,
+        props.singleton
+      )}?duplicate=${encodeURIComponent(currentPageSlug)}`
+    );
+  }, [currentPageSlug, props.basePath, props.config, props.singleton, router]);
+
+  const onDelete = useCallback(() => {
+    const nextItems = currentItems.filter(
+      (_, index) => index !== editorState.pageIndex
+    );
+    const nextState = {
+      ...editorState.state,
+      [props.standalonePageSingleton.itemsField]: nextItems,
+    };
+    const fallbackPage = nextItems[Math.max(editorState.pageIndex - 1, 0)];
+    setPendingDelete({
+      nextHref: fallbackPage
+        ? getStandalonePagePath(
+            props.config,
+            props.basePath,
+            props.singleton,
+            getStandalonePageItemSlug(props.standalonePageSingleton, fallbackPage)
+          )
+        : props.basePath,
+      nextState,
+    });
+    setEditorState(state => ({
+      ...state,
+      pageIndex: Math.max(Math.min(state.pageIndex, nextItems.length - 1), 0),
+      state: nextState,
+    }));
+  }, [
+    currentItems,
+    editorState.pageIndex,
+    editorState.state,
+    props.basePath,
+    props.config,
+    props.singleton,
+    props.standalonePageSingleton,
+  ]);
 
   return (
     <PageRoot containerWidth="none">
@@ -619,60 +799,83 @@ function StandalonePageEditorLocal(
               ) : null}
             </Flex>
             <Text color="neutralSecondary" size="small">
-              Build this page on its own route. It will appear in the sidebar
-              using the page title after you save it.
+              Build this page on its own route. Saving updates the page route,
+              and will sync a settings navigation item when a settings
+              singleton is available.
             </Text>
           </VStack>
           <Flex gap="regular" alignItems="center">
-            <Button
-              prominence="low"
-              onPress={() => {
+            <PreviewToggle
+              isPreviewOpen={isPreviewOpen}
+              onToggle={() => setIsPreviewOpen(!isPreviewOpen)}
+            />
+            <HeaderActions
+              formID={formID}
+              hasChanged={hasChanged}
+              isLoading={updateResult.kind === 'loading'}
+              onDelete={onDelete}
+              onDuplicate={onDuplicate}
+              onCopy={onCopy}
+              onPaste={onPaste}
+              onReset={() => {
                 setForceValidation(false);
                 setEditorState(buildInitialEditorState());
               }}
-            >
-              Reset
-            </Button>
-            <Button form={formID} prominence="high" type="submit">
-              {props.mode === 'create' ? 'Create page' : 'Save page'}
-            </Button>
+              previewHref={previewHref}
+              viewHref={viewHref}
+            />
           </Flex>
         </Flex>
       </PageHeader>
       <PageBody isScrollable>
-        <Box
-          borderRadius="large"
-          padding="xlarge"
-          UNSAFE_style={{
-            background:
-              'linear-gradient(180deg, var(--ks-color-background-surface) 0%, var(--ks-color-background-canvas) 100%)',
-          }}
+        <SplitEditor
+          isPreviewOpen={isPreviewOpen}
+          preview={
+            <PreviewPanel
+              data={currentPage as Record<string, unknown>}
+              href={previewHref}
+              schema={props.standalonePageSingleton.itemSchema.fields}
+              title={pageLabel}
+            />
+          }
+          previewWidth={460}
         >
-          <VStack gap="xlarge">
-            {updateResult.kind === 'error' && (
-              <Notice tone="critical">{updateResult.error.message}</Notice>
-            )}
-            <Box
-              elementType="form"
-              id={formID}
-              onSubmit={(event: FormEvent) => {
-                if (event.target !== event.currentTarget) {
-                  return;
-                }
-                event.preventDefault();
-                savePage();
-              }}
-            >
-              <FormValueContentFromPreviewProps
-                key={pagePreviewKey}
-                {...pagePreviewProps}
-                autoFocus
-                forceValidation={forceValidation}
-                slugField={pageSlugInfo}
-              />
-            </Box>
-          </VStack>
-        </Box>
+          <Box
+            borderRadius="large"
+            padding="xlarge"
+            height="100%"
+            minHeight={0}
+            UNSAFE_style={{
+              background:
+                'linear-gradient(180deg, var(--ks-color-background-surface) 0%, var(--ks-color-background-canvas) 100%)',
+            }}
+          >
+            <VStack gap="xlarge">
+              {updateResult.kind === 'error' && (
+                <Notice tone="critical">{updateResult.error.message}</Notice>
+              )}
+              <Box
+                elementType="form"
+                id={formID}
+                onSubmit={(event: FormEvent) => {
+                  if (event.target !== event.currentTarget) {
+                    return;
+                  }
+                  event.preventDefault();
+                  savePage();
+                }}
+              >
+                <FormValueContentFromPreviewProps
+                  key={pagePreviewKey}
+                  {...pagePreviewProps}
+                  autoFocus
+                  forceValidation={forceValidation}
+                  slugField={pageSlugInfo}
+                />
+              </Box>
+            </VStack>
+          </Box>
+        </SplitEditor>
       </PageBody>
 
       <DialogContainer onDismiss={resetUpdateResult}>
@@ -752,6 +955,7 @@ function upsertNavigationItem(
   });
   if (existingIndex >= 0) {
     nextNav[existingIndex].label = item.label;
+    nextNav[existingIndex].title = item.label;
     nextNav[existingIndex].slug = normalizedSlug;
     if (typeof nextNav[existingIndex].visible !== 'boolean') {
       nextNav[existingIndex].visible = true;
@@ -759,6 +963,7 @@ function upsertNavigationItem(
   } else {
     nextNav.push({
       label: item.label,
+      title: item.label,
       slug: normalizedSlug,
       visible: true,
     });

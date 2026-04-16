@@ -654,7 +654,7 @@ function CollabItemPage(props: ItemPageProps & { map: Y.Map<any> }) {
   );
 }
 
-function HeaderActions(props: {
+export function HeaderActions(props: {
   formID: string;
   hasChanged: boolean;
   isLoading: boolean;
