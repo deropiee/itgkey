@@ -29,6 +29,17 @@ type PreviewMessage = {
   title?: string;
 };
 
+function useDebouncedValue<T>(value: T, delay = 300) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedValue(value), delay);
+    return () => window.clearTimeout(timer);
+  }, [delay, value]);
+
+  return debouncedValue;
+}
+
 function getPreviewPathname(href: string) {
   return getPreviewUrl(href).pathname || '/';
 }
@@ -149,16 +160,18 @@ function renderValue(value: unknown, depth = 0, maxDepth = 3): React.ReactNode {
 
 export function PreviewPanel({ data, href, title }: PreviewPanelProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const debouncedHref = useDebouncedValue(href, 300);
+  const previewHref = debouncedHref ?? href;
   const previewPathname = useMemo(
-    () => (href ? getPreviewPathname(href) : undefined),
-    [href]
+    () => (previewHref ? getPreviewPathname(previewHref) : undefined),
+    [previewHref]
   );
   const iframeHref = useMemo(
-    () => (href ? getPreviewIframeHref(href) : undefined),
-    [href]
+    () => (previewHref ? getPreviewIframeHref(previewHref) : undefined),
+    [previewHref]
   );
   const publishPreview = useCallback(() => {
-    if (!href || !previewPathname) {
+    if (!previewHref || !previewPathname) {
       return;
     }
 
@@ -182,15 +195,18 @@ export function PreviewPanel({ data, href, title }: PreviewPanelProps) {
     }
 
     iframeRef.current?.contentWindow?.postMessage(payload, window.location.origin);
-  }, [data, href, previewPathname, title]);
+  }, [data, previewHref, previewPathname, title]);
 
   useEffect(() => {
-    if (href) {
-      publishPreview();
+    if (previewHref) {
+      const timer = window.setTimeout(() => {
+        publishPreview();
+      }, 300);
+      return () => window.clearTimeout(timer);
     }
-  }, [href, publishPreview]);
+  }, [previewHref, publishPreview]);
 
-  if (href) {
+  if (previewHref) {
     return (
       <Box
         UNSAFE_className={css({
@@ -213,7 +229,7 @@ export function PreviewPanel({ data, href, title }: PreviewPanelProps) {
           <VStack gap="xsmall" minWidth={0}>
             <Heading size="small">{title || 'Preview'}</Heading>
             <Text color="neutralSecondary" size="small" truncate>
-              {href}
+              {previewHref}
             </Text>
           </VStack>
         </Flex>

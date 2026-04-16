@@ -1,5 +1,11 @@
 # @keystatic/core
 
+## 0.5.56
+
+### Patch Changes
+
+- Debounce live CMS preview updates and preview route changes so the preview pane updates after typing without reloading on every keystroke.
+
 ## 0.5.55
 
 ### Patch Changes
