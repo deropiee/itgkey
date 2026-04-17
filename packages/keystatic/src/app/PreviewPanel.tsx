@@ -541,7 +541,7 @@ export function SplitEditor({
               position: 'relative',
               flex: '0 0 auto',
             })}
-            style={{
+            UNSAFE_style={{
               flexBasis: `${currentWidth}px`,
               width: `${currentWidth}px`,
             }}
