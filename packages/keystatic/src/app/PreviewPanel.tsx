@@ -406,11 +406,17 @@ export function SplitEditor({
   isPreviewOpen,
   previewWidth = DEFAULT_PREVIEW_WIDTH,
 }: SplitEditorProps) {
+  const resizeHandleRef = useRef<HTMLDivElement | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [currentWidth, setCurrentWidth] = useState(
     typeof previewWidth === 'number' ? previewWidth : DEFAULT_PREVIEW_WIDTH
   );
+  const dragStateRef = useRef<{
+    pointerId: number;
+    startWidth: number;
+    startX: number;
+  } | null>(null);
 
   useEffect(() => {
     if (typeof previewWidth === 'number') {
@@ -418,61 +424,61 @@ export function SplitEditor({
     }
   }, [previewWidth]);
 
-  const startResize = useCallback((clientX: number) => {
+  const stopResize = useCallback(() => {
+    dragStateRef.current = null;
+    setIsDragging(false);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }, []);
+
+  const onPointerDownResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      startWidth: currentWidth,
+      startX: event.clientX,
+    };
+    resizeHandleRef.current?.setPointerCapture(event.pointerId);
     setIsDragging(true);
-    const startX = clientX;
-    const startWidth = currentWidth;
-
-    const updateWidth = (nextClientX: number) => {
-      const maxWidth = Math.max(
-        MIN_PREVIEW_WIDTH,
-        Math.floor(window.innerWidth * MAX_PREVIEW_WIDTH_RATIO)
-      );
-      const nextWidth = Math.min(
-        maxWidth,
-        Math.max(MIN_PREVIEW_WIDTH, startWidth - (nextClientX - startX))
-      );
-      setCurrentWidth(nextWidth);
-    };
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      updateWidth(moveEvent.clientX);
-    };
-
-    const handleTouchMove = (moveEvent: TouchEvent) => {
-      if (moveEvent.touches[0]) {
-        updateWidth(moveEvent.touches[0].clientX);
-      }
-    };
-
-    const stopResize = () => {
-      setIsDragging(false);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', stopResize);
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('touchend', stopResize);
-    };
-
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', stopResize);
-    window.addEventListener('touchmove', handleTouchMove, { passive: true });
-    window.addEventListener('touchend', stopResize);
   }, [currentWidth]);
 
-  const onMouseDownResize = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    startResize(event.clientX);
-  }, [startResize]);
+  const onPointerMoveResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const dragState = dragStateRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) {
+      return;
+    }
 
-  const onTouchStartResize = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
-    const touch = event.touches[0];
-    if (!touch) return;
-    startResize(touch.clientX);
-  }, [startResize]);
+    const maxWidth = Math.max(
+      MIN_PREVIEW_WIDTH,
+      Math.floor(window.innerWidth * MAX_PREVIEW_WIDTH_RATIO)
+    );
+    const nextWidth = Math.min(
+      maxWidth,
+      Math.max(
+        MIN_PREVIEW_WIDTH,
+        dragState.startWidth - (event.clientX - dragState.startX)
+      )
+    );
+
+    setCurrentWidth(nextWidth);
+  }, []);
+
+  const onPointerUpResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (dragStateRef.current?.pointerId !== event.pointerId) {
+      return;
+    }
+    resizeHandleRef.current?.releasePointerCapture(event.pointerId);
+    stopResize();
+  }, [stopResize]);
+
+  useEffect(() => {
+    return () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, []);
 
   if (!isPreviewOpen) {
     return <>{children}</>;
@@ -486,11 +492,14 @@ export function SplitEditor({
       {!isCollapsed && (
         <>
           <Box
+            ref={resizeHandleRef}
             role="separator"
             aria-orientation="vertical"
             aria-label="Resize preview panel"
-            onMouseDown={onMouseDownResize}
-            onTouchStart={onTouchStartResize}
+            onPointerDown={onPointerDownResize}
+            onPointerMove={onPointerMoveResize}
+            onPointerUp={onPointerUpResize}
+            onPointerCancel={onPointerUpResize}
             UNSAFE_className={css({
               width: `${RESIZE_HANDLE_WIDTH}px`,
               minWidth: `${RESIZE_HANDLE_WIDTH}px`,
@@ -533,6 +542,7 @@ export function SplitEditor({
               flex: '0 0 auto',
             })}
             style={{
+              flexBasis: `${currentWidth}px`,
               width: `${currentWidth}px`,
             }}
           >
