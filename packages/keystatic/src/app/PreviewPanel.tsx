@@ -27,7 +27,29 @@ type PreviewMessage = {
   source: 'itg-preview';
   timestamp: number;
   title?: string;
+  viewport?: PreviewViewport;
 };
+
+type PreviewViewportPreset = 'desktop' | 'tablet' | 'mobile' | 'ultrawide';
+
+type PreviewViewport = {
+  height: number;
+  label: string;
+  preset: PreviewViewportPreset;
+  width: number;
+};
+
+const DEFAULT_PREVIEW_WIDTH = 520;
+const MIN_PREVIEW_WIDTH = 360;
+const MAX_PREVIEW_WIDTH_RATIO = 0.8;
+const RESIZE_HANDLE_WIDTH = 12;
+
+const PREVIEW_VIEWPORTS: PreviewViewport[] = [
+  { preset: 'desktop', label: 'Desktop 16:9', width: 1440, height: 810 },
+  { preset: 'mobile', label: 'Phone 9:16', width: 390, height: 844 },
+  { preset: 'tablet', label: 'Tablet 4:3', width: 1024, height: 768 },
+  { preset: 'ultrawide', label: 'Desktop 21:9', width: 1680, height: 720 },
+];
 
 function useDebouncedValue<T>(value: T, delay = 300) {
   const [debouncedValue, setDebouncedValue] = useState(value);
@@ -59,6 +81,67 @@ function getPreviewUrl(href: string) {
     href,
     typeof window === 'undefined' ? 'http://localhost' : window.location.origin
   );
+}
+
+function sanitizePreviewValue(
+  value: unknown,
+  seen = new WeakSet<object>(),
+  depth = 0
+): unknown {
+  if (
+    value === null ||
+    value === undefined ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return value;
+  }
+
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+
+  if (typeof value === 'function' || typeof value === 'symbol') {
+    return undefined;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (value instanceof Uint8Array) {
+    return Array.from(value);
+  }
+
+  if (Array.isArray(value)) {
+    if (depth > 8) return '[truncated]';
+    return value
+      .map(item => sanitizePreviewValue(item, seen, depth + 1))
+      .filter(item => item !== undefined);
+  }
+
+  if (typeof value === 'object') {
+    if (seen.has(value)) return '[circular]';
+    seen.add(value);
+
+    if ('$$typeof' in value || '_owner' in value) {
+      return '[component]';
+    }
+
+    if (depth > 8) return '[truncated]';
+
+    const output: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      const sanitized = sanitizePreviewValue(entry, seen, depth + 1);
+      if (sanitized !== undefined) {
+        output[key] = sanitized;
+      }
+    }
+    return output;
+  }
+
+  return String(value);
 }
 
 // Render a preview of the entry data - with depth limit to prevent stack overflow
@@ -160,8 +243,13 @@ function renderValue(value: unknown, depth = 0, maxDepth = 3): React.ReactNode {
 
 export function PreviewPanel({ data, href, title }: PreviewPanelProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const [viewport, setViewport] = useState<PreviewViewport>(PREVIEW_VIEWPORTS[0]);
   const debouncedHref = useDebouncedValue(href, 300);
   const previewHref = debouncedHref ?? href;
+  const sanitizedData = useMemo(
+    () => sanitizePreviewValue(data) as Record<string, unknown>,
+    [data]
+  );
   const previewPathname = useMemo(
     () => (previewHref ? getPreviewPathname(previewHref) : undefined),
     [previewHref]
@@ -176,11 +264,12 @@ export function PreviewPanel({ data, href, title }: PreviewPanelProps) {
     }
 
     const payload: PreviewMessage = {
-      data,
+      data: sanitizedData,
       pathname: previewPathname,
       source: 'itg-preview',
       timestamp: Date.now(),
       title,
+      viewport,
     };
     const storageKey = getPreviewStorageKey(previewPathname);
 
@@ -195,7 +284,7 @@ export function PreviewPanel({ data, href, title }: PreviewPanelProps) {
     }
 
     iframeRef.current?.contentWindow?.postMessage(payload, window.location.origin);
-  }, [data, previewHref, previewPathname, title]);
+  }, [previewHref, previewPathname, sanitizedData, title, viewport]);
 
   useEffect(() => {
     if (previewHref) {
@@ -232,20 +321,57 @@ export function PreviewPanel({ data, href, title }: PreviewPanelProps) {
               {previewHref}
             </Text>
           </VStack>
+          <Flex gap="xsmall" wrap justifyContent="end">
+            {PREVIEW_VIEWPORTS.map(option => (
+              <ActionButton
+                key={option.preset}
+                prominence={viewport.preset === option.preset ? 'high' : 'low'}
+                onPress={() => setViewport(option)}
+              >
+                {option.label}
+              </ActionButton>
+            ))}
+          </Flex>
         </Flex>
-        <iframe
-          ref={iframeRef}
-          title={title || 'Preview'}
-          src={iframeHref}
-          onLoad={publishPreview}
-          className={css({
-            border: 0,
+        <Box
+          UNSAFE_className={css({
             flex: 1,
-            width: '100%',
             minHeight: 0,
-            backgroundColor: tokenSchema.color.background.canvas,
+            overflow: 'auto',
+            padding: tokenSchema.size.space.large,
+            background:
+              'linear-gradient(180deg, #f8fafc 0%, #eef2ff 45%, #f8fafc 100%)',
           })}
-        />
+        >
+          <Box
+            UNSAFE_className={css({
+              margin: '0 auto',
+              width: 'fit-content',
+            })}
+            style={{
+              width: `${viewport.width}px`,
+              height: `${viewport.height}px`,
+            }}
+          >
+            <iframe
+              ref={iframeRef}
+              title={title || 'Preview'}
+              src={iframeHref}
+              width={viewport.width}
+              height={viewport.height}
+              onLoad={publishPreview}
+              className={css({
+                border: `1px solid ${tokenSchema.color.border.neutral}`,
+                borderRadius: tokenSchema.size.radius.large,
+                width: '100%',
+                height: '100%',
+                minHeight: 0,
+                backgroundColor: tokenSchema.color.background.canvas,
+                boxShadow: '0 24px 60px rgba(15, 23, 42, 0.14)',
+              })}
+            />
+          </Box>
+        </Box>
       </Box>
     );
   }
@@ -324,9 +450,44 @@ export function SplitEditor({
   children,
   preview,
   isPreviewOpen,
-  previewWidth = '400px',
+  previewWidth = DEFAULT_PREVIEW_WIDTH,
 }: SplitEditorProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [currentWidth, setCurrentWidth] = useState(
+    typeof previewWidth === 'number' ? previewWidth : DEFAULT_PREVIEW_WIDTH
+  );
+
+  useEffect(() => {
+    if (typeof previewWidth === 'number') {
+      setCurrentWidth(previewWidth);
+    }
+  }, [previewWidth]);
+
+  const startResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = currentWidth;
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const maxWidth = Math.max(
+        MIN_PREVIEW_WIDTH,
+        Math.floor(window.innerWidth * MAX_PREVIEW_WIDTH_RATIO)
+      );
+      const nextWidth = Math.min(
+        maxWidth,
+        Math.max(MIN_PREVIEW_WIDTH, startWidth - (moveEvent.clientX - startX))
+      );
+      setCurrentWidth(nextWidth);
+    };
+
+    const handlePointerUp = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+  }, [currentWidth]);
 
   if (!isPreviewOpen) {
     return <>{children}</>;
@@ -339,19 +500,40 @@ export function SplitEditor({
       </Box>
       {!isCollapsed && (
         <>
-          <Divider orientation="vertical" />
+          <Box
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize preview panel"
+            onPointerDown={startResize}
+            UNSAFE_className={css({
+              width: `${RESIZE_HANDLE_WIDTH}px`,
+              cursor: 'col-resize',
+              backgroundColor: tokenSchema.color.background.canvas,
+              position: 'relative',
+              flexShrink: 0,
+              ':before': {
+                content: '""',
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                left: '50%',
+                width: '1px',
+                transform: 'translateX(-50%)',
+                backgroundColor: tokenSchema.color.border.neutral,
+              },
+            })}
+          />
           <Box
             UNSAFE_className={css({
-              width:
-                typeof previewWidth === 'number'
-                  ? `${previewWidth}px`
-                  : previewWidth,
-              minWidth: '300px',
-              maxWidth: '50%',
+              minWidth: `${MIN_PREVIEW_WIDTH}px`,
+              maxWidth: '80vw',
               backgroundColor: tokenSchema.color.background.canvas,
               borderLeft: `1px solid ${tokenSchema.color.border.neutral}`,
               position: 'relative',
             })}
+            style={{
+              width: `${currentWidth}px`,
+            }}
           >
             <Flex
               padding="small"
