@@ -27,95 +27,12 @@ type PreviewMessage = {
   source: 'itg-preview';
   timestamp: number;
   title?: string;
-  viewport?: PreviewViewport;
-};
-
-type PreviewViewportPreset = 'desktop' | 'tablet' | 'mobile' | 'ultrawide' | 'free';
-
-type PreviewViewport = {
-  height?: number;
-  label: string;
-  preset: PreviewViewportPreset;
-  width?: number;
 };
 
 const DEFAULT_PREVIEW_WIDTH = 520;
 const MIN_PREVIEW_WIDTH = 360;
 const MAX_PREVIEW_WIDTH_RATIO = 0.8;
 const RESIZE_HANDLE_WIDTH = 12;
-const PREVIEW_STAGE_PADDING = 24;
-
-const PREVIEW_VIEWPORTS: PreviewViewport[] = [
-  { preset: 'desktop', label: 'Desktop 16:9', width: 1440, height: 810 },
-  { preset: 'mobile', label: 'Phone 9:16', width: 390, height: 844 },
-  { preset: 'tablet', label: 'Tablet 4:3', width: 1024, height: 768 },
-  { preset: 'ultrawide', label: 'Desktop 21:9', width: 1680, height: 720 },
-  { preset: 'free', label: 'Free aspect' },
-];
-
-function DesktopPreviewIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
-      <rect x="3" y="5" width="18" height="12" rx="2" stroke="currentColor" strokeWidth="1.75" />
-      <path d="M9 19h6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-      <path d="M12 17v2" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function PhonePreviewIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
-      <rect x="7" y="2.75" width="10" height="18.5" rx="2.5" stroke="currentColor" strokeWidth="1.75" />
-      <path d="M10.5 5.75h3" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-      <circle cx="12" cy="18.2" r="0.9" fill="currentColor" />
-    </svg>
-  );
-}
-
-function TabletPreviewIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
-      <rect x="4.5" y="3.5" width="15" height="17" rx="2.5" stroke="currentColor" strokeWidth="1.75" />
-      <circle cx="12" cy="17.5" r="0.9" fill="currentColor" />
-    </svg>
-  );
-}
-
-function UltrawidePreviewIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
-      <rect x="2" y="7" width="20" height="10" rx="2" stroke="currentColor" strokeWidth="1.75" />
-      <path d="M8.5 19h7" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function FreePreviewIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
-      <path d="M8 4H4v4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M16 4h4v4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M20 16v4h-4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M8 20H4v-4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function getViewportIcon(preset: PreviewViewportPreset) {
-  switch (preset) {
-    case 'desktop':
-      return <DesktopPreviewIcon />;
-    case 'mobile':
-      return <PhonePreviewIcon />;
-    case 'tablet':
-      return <TabletPreviewIcon />;
-    case 'ultrawide':
-      return <UltrawidePreviewIcon />;
-    case 'free':
-      return <FreePreviewIcon />;
-  }
-}
 
 function useDebouncedValue<T>(value: T, delay = 300) {
   const [debouncedValue, setDebouncedValue] = useState(value);
@@ -309,9 +226,6 @@ function renderValue(value: unknown, depth = 0, maxDepth = 3): React.ReactNode {
 
 export function PreviewPanel({ data, href, title }: PreviewPanelProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const stageRef = useRef<HTMLDivElement | null>(null);
-  const [viewport, setViewport] = useState<PreviewViewport>(PREVIEW_VIEWPORTS[0]);
-  const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const debouncedHref = useDebouncedValue(href, 300);
   const previewHref = debouncedHref ?? href;
   const sanitizedData = useMemo(
@@ -337,7 +251,6 @@ export function PreviewPanel({ data, href, title }: PreviewPanelProps) {
       source: 'itg-preview',
       timestamp: Date.now(),
       title,
-      viewport,
     };
     const storageKey = getPreviewStorageKey(previewPathname);
 
@@ -352,7 +265,7 @@ export function PreviewPanel({ data, href, title }: PreviewPanelProps) {
     }
 
     iframeRef.current?.contentWindow?.postMessage(payload, window.location.origin);
-  }, [previewHref, previewPathname, sanitizedData, title, viewport]);
+  }, [previewHref, previewPathname, sanitizedData, title]);
 
   useEffect(() => {
     if (previewHref) {
@@ -362,54 +275,6 @@ export function PreviewPanel({ data, href, title }: PreviewPanelProps) {
       return () => window.clearTimeout(timer);
     }
   }, [previewHref, publishPreview]);
-
-  useEffect(() => {
-    const stage = stageRef.current;
-    if (!stage || typeof ResizeObserver === 'undefined') {
-      return;
-    }
-
-    const updateSize = () => {
-      setStageSize({
-        width: stage.clientWidth,
-        height: stage.clientHeight,
-      });
-    };
-
-    updateSize();
-
-    const observer = new ResizeObserver(updateSize);
-    observer.observe(stage);
-    return () => observer.disconnect();
-  }, []);
-
-  const scaledViewport = useMemo(() => {
-    if (viewport.preset === 'free' || !viewport.width || !viewport.height) {
-      return null;
-    }
-
-    const availableWidth = Math.max(0, stageSize.width - PREVIEW_STAGE_PADDING * 2);
-    const availableHeight = Math.max(0, stageSize.height - PREVIEW_STAGE_PADDING * 2);
-
-    if (!availableWidth || !availableHeight) {
-      return {
-        height: viewport.height,
-        scale: 1,
-        width: viewport.width,
-      };
-    }
-
-    const scale = Math.min(
-      availableWidth / viewport.width,
-      availableHeight / viewport.height
-    );
-
-    return {
-      width: Math.max(1, Math.floor(viewport.width * scale)),
-      height: Math.max(1, Math.floor(viewport.height * scale)),
-      scale,
-    };
-  }, [stageSize.height, stageSize.width, viewport]);
 
   if (previewHref) {
     return (
@@ -423,7 +288,6 @@ export function PreviewPanel({ data, href, title }: PreviewPanelProps) {
       >
         <Flex
           alignItems="center"
-          justifyContent="space-between"
           gap="regular"
           padding="regular"
           UNSAFE_className={css({
@@ -437,84 +301,30 @@ export function PreviewPanel({ data, href, title }: PreviewPanelProps) {
               {previewHref}
             </Text>
           </VStack>
-          <Flex gap="xsmall" wrap justifyContent="end">
-            {PREVIEW_VIEWPORTS.map(option => (
-              <TooltipTrigger key={option.preset}>
-                <ActionButton
-                  prominence={viewport.preset === option.preset ? 'high' : 'low'}
-                  onPress={() => setViewport(option)}
-                  aria-label={option.label}
-                >
-                  {getViewportIcon(option.preset)}
-                </ActionButton>
-                <Tooltip>{option.label}</Tooltip>
-              </TooltipTrigger>
-            ))}
-          </Flex>
         </Flex>
         <Box
-          ref={stageRef}
           UNSAFE_className={css({
             flex: 1,
             minHeight: 0,
-            overflow: 'auto',
+            overflow: 'hidden',
             padding: tokenSchema.size.space.large,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background:
-              'linear-gradient(180deg, #f8fafc 0%, #eef2ff 45%, #f8fafc 100%)',
+            backgroundColor: tokenSchema.color.background.canvas,
           })}
         >
-          {viewport.preset === 'free' ? (
-            <iframe
-              ref={iframeRef}
-              title={title || 'Preview'}
-              src={iframeHref}
-              onLoad={publishPreview}
-              className={css({
-                border: `1px solid ${tokenSchema.color.border.neutral}`,
-                borderRadius: tokenSchema.size.radius.large,
-                width: '100%',
-                height: '100%',
-                minHeight: 0,
-                backgroundColor: tokenSchema.color.background.canvas,
-                boxShadow: '0 24px 60px rgba(15, 23, 42, 0.14)',
-              })}
-            />
-          ) : (
-            <Box
-              UNSAFE_className={css({
-                flexShrink: 0,
-                overflow: 'visible',
-              })}
-              style={{
-                width: `${scaledViewport?.width ?? viewport.width}px`,
-                height: `${scaledViewport?.height ?? viewport.height}px`,
-              }}
-            >
-              <iframe
-                ref={iframeRef}
-                title={title || 'Preview'}
-                src={iframeHref}
-                width={viewport.width}
-                height={viewport.height}
-                onLoad={publishPreview}
-                className={css({
-                  border: `1px solid ${tokenSchema.color.border.neutral}`,
-                  borderRadius: tokenSchema.size.radius.large,
-                  backgroundColor: tokenSchema.color.background.canvas,
-                  boxShadow: '0 24px 60px rgba(15, 23, 42, 0.14)',
-                  transformOrigin: 'top left',
-                })}
-                style={{
-                  width: `${viewport.width}px`,
-                  height: `${viewport.height}px`,
-                  transform: `scale(${scaledViewport?.scale ?? 1})`,
-                }}
-              />
-            </Box>
-          )}
+          <iframe
+            ref={iframeRef}
+            title={title || 'Preview'}
+            src={iframeHref}
+            onLoad={publishPreview}
+            className={css({
+              border: `1px solid ${tokenSchema.color.border.neutral}`,
+              borderRadius: tokenSchema.size.radius.large,
+              width: '100%',
+              height: '100%',
+              minHeight: 0,
+              backgroundColor: tokenSchema.color.background.canvas,
+            })}
+          />
         </Box>
       </Box>
     );
@@ -608,33 +418,61 @@ export function SplitEditor({
     }
   }, [previewWidth]);
 
-  const startResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
+  const startResize = useCallback((clientX: number) => {
     setIsDragging(true);
-    const startX = event.clientX;
+    const startX = clientX;
     const startWidth = currentWidth;
 
-    const handlePointerMove = (moveEvent: PointerEvent) => {
+    const updateWidth = (nextClientX: number) => {
       const maxWidth = Math.max(
         MIN_PREVIEW_WIDTH,
         Math.floor(window.innerWidth * MAX_PREVIEW_WIDTH_RATIO)
       );
       const nextWidth = Math.min(
         maxWidth,
-        Math.max(MIN_PREVIEW_WIDTH, startWidth - (moveEvent.clientX - startX))
+        Math.max(MIN_PREVIEW_WIDTH, startWidth - (nextClientX - startX))
       );
       setCurrentWidth(nextWidth);
     };
 
-    const handlePointerUp = () => {
-      setIsDragging(false);
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      updateWidth(moveEvent.clientX);
     };
 
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
+    const handleTouchMove = (moveEvent: TouchEvent) => {
+      if (moveEvent.touches[0]) {
+        updateWidth(moveEvent.touches[0].clientX);
+      }
+    };
+
+    const stopResize = () => {
+      setIsDragging(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', stopResize);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', stopResize);
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', stopResize);
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('touchend', stopResize);
   }, [currentWidth]);
+
+  const onMouseDownResize = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    startResize(event.clientX);
+  }, [startResize]);
+
+  const onTouchStartResize = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    const touch = event.touches[0];
+    if (!touch) return;
+    startResize(touch.clientX);
+  }, [startResize]);
 
   if (!isPreviewOpen) {
     return <>{children}</>;
@@ -651,7 +489,8 @@ export function SplitEditor({
             role="separator"
             aria-orientation="vertical"
             aria-label="Resize preview panel"
-            onPointerDown={startResize}
+            onMouseDown={onMouseDownResize}
+            onTouchStart={onTouchStartResize}
             UNSAFE_className={css({
               width: `${RESIZE_HANDLE_WIDTH}px`,
               minWidth: `${RESIZE_HANDLE_WIDTH}px`,
@@ -660,7 +499,6 @@ export function SplitEditor({
               position: 'relative',
               flexShrink: 0,
               alignSelf: 'stretch',
-              touchAction: 'none',
               userSelect: 'none',
               zIndex: 2,
               ':before': {
@@ -692,6 +530,7 @@ export function SplitEditor({
               backgroundColor: tokenSchema.color.background.canvas,
               borderLeft: `1px solid ${tokenSchema.color.border.neutral}`,
               position: 'relative',
+              flex: '0 0 auto',
             })}
             style={{
               width: `${currentWidth}px`,
